@@ -10,9 +10,9 @@ st.title("📊 Tool Điểm Danh - Xuất Excel")
 
 
 # ======================
-# Hàm viết gọn tên học sinh
+# Hàm xử lý tên học sinh
 # ======================
-def viet_gon_ten(ho_ten):
+def xu_ly_ten(ho_ten, kieu_ten="Đầy đủ"):
     if pd.isna(ho_ten):
         return ""
 
@@ -21,25 +21,25 @@ def viet_gon_ten(ho_ten):
     if not cac_tu:
         return ""
 
-    if len(cac_tu) == 1:
-        return cac_tu[0]
+    if kieu_ten == "Rút gọn toàn bộ":
+        # Nguyễn Văn An -> N.V.An
+        return "".join(
+            tu[0].upper() + "."
+            for tu in cac_tu[:-1]
+        ) + cac_tu[-1]
 
-    # Viết chữ cái đầu của họ và tên đệm,
-    # giữ nguyên tên cuối cùng
-    cac_tu_rut_gon = [
-        tu[0].upper() + "."
-        for tu in cac_tu[:-1]
-    ]
+    elif kieu_ten == "Rút gọn họ":
+        # Nguyễn Văn An -> N.Văn An
+        return cac_tu[0][0].upper() + "." + " ".join(cac_tu[1:])
 
-    cac_tu_rut_gon.append(cac_tu[-1])
-
-    return "".join(cac_tu_rut_gon)
+    # Giữ nguyên họ tên
+    return " ".join(cac_tu)
 
 
 # ======================
 # Hàm xử lý 1 file
 # ======================
-def process_file(file, buoi=None, viet_gon=False):
+def process_file(file, buoi=None, kieu_ten="Đầy đủ"):
     file.seek(0)
     df = pd.read_excel(file, skiprows=5)
     df = df.iloc[:, :-4]  # Bỏ 4 cột cuối
@@ -59,10 +59,13 @@ def process_file(file, buoi=None, viet_gon=False):
             # Vắng không phép (K)
             vang_k = group[group[col] == "K"]["Họ và tên"].tolist()
 
-            # Viết gọn tên nếu người dùng tích chọn
-            if viet_gon:
-                vang_p = [viet_gon_ten(ten) for ten in vang_p]
-                vang_k = [viet_gon_ten(ten) for ten in vang_k]
+            # Xử lý tên theo lựa chọn
+            vang_p = [
+                xu_ly_ten(ten, kieu_ten) for ten in vang_p
+            ]
+            vang_k = [
+                xu_ly_ten(ten, kieu_ten) for ten in vang_k
+            ]
 
             danh_sach += [f"{ten} (P)" for ten in vang_p]
             danh_sach += [f"{ten} (K)" for ten in vang_k]
@@ -126,6 +129,16 @@ def export_excel(pivot):
 
 
 # ======================
+# Các lựa chọn viết tên
+# ======================
+CAC_KIEU_TEN = [
+    "Đầy đủ",
+    "Rút gọn họ",
+    "Rút gọn toàn bộ"
+]
+
+
+# ======================
 # Tabs giao diện
 # ======================
 tab1, tab2 = st.tabs([
@@ -146,10 +159,15 @@ with tab1:
         key="onefile"
     )
 
-    rut_gon_1 = st.checkbox(
-        "✂️ Viết gọn tên học sinh (Nguyễn Văn An → N.V.An)",
-        value=False,
-        key="rut_gon_1"
+    kieu_ten_1 = st.selectbox(
+        "Cách hiển thị tên học sinh",
+        CAC_KIEU_TEN,
+        format_func=lambda x: {
+            "Đầy đủ": "Đầy đủ - Nguyễn Văn An",
+            "Rút gọn họ": "Rút gọn họ - N.Văn An",
+            "Rút gọn toàn bộ": "Rút gọn toàn bộ - N.V.An"
+        }[x],
+        key="kieu_ten_1"
     )
 
     if file1:
@@ -157,7 +175,7 @@ with tab1:
             try:
                 df1, thu_tu_ngay = process_file(
                     file1,
-                    viet_gon=rut_gon_1
+                    kieu_ten=kieu_ten_1
                 )
 
                 pivot1 = df1.pivot(
@@ -185,7 +203,7 @@ with tab1:
 
 
 # ======================
-# Tab 2: Xử lý 2 file sáng + chiều
+# Tab 2: Xử lý 2 file
 # ======================
 with tab2:
     st.subheader("Xử lý 2 file Excel (Sáng + Chiều)")
@@ -206,10 +224,15 @@ with tab2:
             key="afternoon"
         )
 
-    rut_gon_2 = st.checkbox(
-        "✂️ Viết gọn tên học sinh (Nguyễn Văn An → N.V.An)",
-        value=False,
-        key="rut_gon_2"
+    kieu_ten_2 = st.selectbox(
+        "Cách hiển thị tên học sinh",
+        CAC_KIEU_TEN,
+        format_func=lambda x: {
+            "Đầy đủ": "Đầy đủ - Nguyễn Văn An",
+            "Rút gọn họ": "Rút gọn họ - N.Văn An",
+            "Rút gọn toàn bộ": "Rút gọn toàn bộ - N.V.An"
+        }[x],
+        key="kieu_ten_2"
     )
 
     if st.button("Xử lý và Tải xuống", key="btn2"):
@@ -222,17 +245,17 @@ with tab2:
                 df_morning, ngay_sang = process_file(
                     morning_file,
                     buoi="Sáng",
-                    viet_gon=rut_gon_2
+                    kieu_ten=kieu_ten_2
                 )
 
                 df_afternoon, ngay_chieu = process_file(
                     afternoon_file,
                     buoi="Chiều",
-                    viet_gon=rut_gon_2
+                    kieu_ten=kieu_ten_2
                 )
 
-                # Ưu tiên thứ tự ngày của file sáng,
-                # bổ sung ngày chỉ có trong file chiều
+                # Ưu tiên thứ tự ngày của file sáng
+                # Bổ sung ngày chỉ có trong file chiều
                 thu_tu_ngay = ngay_sang + [
                     ngay for ngay in ngay_chieu
                     if ngay not in ngay_sang
