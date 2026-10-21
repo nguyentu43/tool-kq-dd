@@ -10,14 +10,41 @@ st.title("📊 Tool Điểm Danh - Xuất Excel")
 
 
 # ======================
+# Hàm viết gọn tên học sinh
+# ======================
+def viet_gon_ten(ho_ten):
+    if pd.isna(ho_ten):
+        return ""
+
+    cac_tu = str(ho_ten).strip().split()
+
+    if not cac_tu:
+        return ""
+
+    if len(cac_tu) == 1:
+        return cac_tu[0]
+
+    # Viết chữ cái đầu của họ và tên đệm,
+    # giữ nguyên tên cuối cùng
+    cac_tu_rut_gon = [
+        tu[0].upper() + "."
+        for tu in cac_tu[:-1]
+    ]
+
+    cac_tu_rut_gon.append(cac_tu[-1])
+
+    return "".join(cac_tu_rut_gon)
+
+
+# ======================
 # Hàm xử lý 1 file
 # ======================
-def process_file(file, buoi=None):
+def process_file(file, buoi=None, viet_gon=False):
     file.seek(0)
     df = pd.read_excel(file, skiprows=5)
     df = df.iloc[:, :-4]  # Bỏ 4 cột cuối
 
-    # Giữ nguyên thứ tự các cột ngày trong file gốc
+    # Giữ thứ tự ngày theo file gốc
     ngay_list = list(df.columns[4:])
 
     rows = []
@@ -28,10 +55,16 @@ def process_file(file, buoi=None):
 
             # Vắng có phép (P)
             vang_p = group[group[col] == "P"]["Họ và tên"].tolist()
-            danh_sach += [f"{ten} (P)" for ten in vang_p]
 
             # Vắng không phép (K)
             vang_k = group[group[col] == "K"]["Họ và tên"].tolist()
+
+            # Viết gọn tên nếu người dùng tích chọn
+            if viet_gon:
+                vang_p = [viet_gon_ten(ten) for ten in vang_p]
+                vang_k = [viet_gon_ten(ten) for ten in vang_k]
+
+            danh_sach += [f"{ten} (P)" for ten in vang_p]
             danh_sach += [f"{ten} (K)" for ten in vang_k]
 
             so_vang = len(danh_sach)
@@ -54,7 +87,7 @@ def process_file(file, buoi=None):
 
 
 # ======================
-# Xuất Excel có format
+# Xuất Excel có định dạng
 # ======================
 def export_excel(pivot):
     output = BytesIO()
@@ -64,14 +97,12 @@ def export_excel(pivot):
     wb = load_workbook(output)
     ws = wb.active
 
-    # Đặt độ rộng cột
     ws.column_dimensions["A"].width = 12
 
     for col in ws.iter_cols(min_col=2, max_col=ws.max_column):
         col_letter = col[0].column_letter
         ws.column_dimensions[col_letter].width = 40
 
-    # Căn lề và tự xuống dòng
     for row in ws.iter_rows(
         min_row=2,
         max_row=ws.max_row,
@@ -115,11 +146,19 @@ with tab1:
         key="onefile"
     )
 
+    rut_gon_1 = st.checkbox(
+        "✂️ Viết gọn tên học sinh (Nguyễn Văn An → N.V.An)",
+        value=False,
+        key="rut_gon_1"
+    )
+
     if file1:
         if st.button("Xử lý và Tải xuống", key="btn1"):
-
             try:
-                df1, thu_tu_ngay = process_file(file1)
+                df1, thu_tu_ngay = process_file(
+                    file1,
+                    viet_gon=rut_gon_1
+                )
 
                 pivot1 = df1.pivot(
                     index="Lớp",
@@ -127,7 +166,6 @@ with tab1:
                     values="Thống kê"
                 )
 
-                # Sắp xếp lại cột theo đúng thứ tự file gốc
                 pivot1 = pivot1.reindex(columns=thu_tu_ngay)
                 pivot1 = pivot1.reset_index()
                 pivot1.columns.name = None
@@ -147,7 +185,7 @@ with tab1:
 
 
 # ======================
-# Tab 2: Xử lý 2 file
+# Tab 2: Xử lý 2 file sáng + chiều
 # ======================
 with tab2:
     st.subheader("Xử lý 2 file Excel (Sáng + Chiều)")
@@ -168,32 +206,38 @@ with tab2:
             key="afternoon"
         )
 
-    if st.button("Xử lý và Tải xuống", key="btn2"):
+    rut_gon_2 = st.checkbox(
+        "✂️ Viết gọn tên học sinh (Nguyễn Văn An → N.V.An)",
+        value=False,
+        key="rut_gon_2"
+    )
 
+    if st.button("Xử lý và Tải xuống", key="btn2"):
         if not morning_file or not afternoon_file:
             st.error(
                 "⚠️ Bạn cần tải lên đủ 2 file (Sáng + Chiều) trước khi xử lý."
             )
-
         else:
             try:
-                # Xử lý file sáng và chiều
                 df_morning, ngay_sang = process_file(
-                    morning_file, "Sáng"
+                    morning_file,
+                    buoi="Sáng",
+                    viet_gon=rut_gon_2
                 )
 
                 df_afternoon, ngay_chieu = process_file(
-                    afternoon_file, "Chiều"
+                    afternoon_file,
+                    buoi="Chiều",
+                    viet_gon=rut_gon_2
                 )
 
-                # Thứ tự ngày: ưu tiên file sáng,
-                # bổ sung các ngày chỉ có trong file chiều
+                # Ưu tiên thứ tự ngày của file sáng,
+                # bổ sung ngày chỉ có trong file chiều
                 thu_tu_ngay = ngay_sang + [
                     ngay for ngay in ngay_chieu
                     if ngay not in ngay_sang
                 ]
 
-                # Gộp dữ liệu sáng và chiều
                 combined = pd.concat(
                     [df_morning, df_afternoon],
                     ignore_index=True
@@ -214,8 +258,6 @@ with tab2:
                     values="Thống kê"
                 )
 
-                # Giữ thứ tự ngày theo file sáng,
-                # rồi đến ngày bổ sung từ file chiều
                 pivot2 = pivot2.reindex(columns=thu_tu_ngay)
                 pivot2 = pivot2.reset_index()
                 pivot2.columns.name = None
